@@ -1,10 +1,12 @@
 import { createOffer, acceptAnswer, createAnswer, whenOpen } from './peer.js';
 import { renderQr, QrScanner } from './qr.js';
 import { HostRoom, GuestRoom } from './room.js';
+import * as quiz from './quiz-ui.js';
+import { TIMING } from './game.js';
 
 const $ = (id) => document.getElementById(id);
 const CONNECT_TIMEOUT_MS = 20000;
-const APP_VERSION = 'v3';
+const APP_VERSION = 'v4';
 const DEBUG = new URLSearchParams(location.search).has('debug') || localStorage.getItem('fwf.debug') === '1';
 const BOT_NAMES = ['Alice', 'Bruno', 'Chloé'];
 
@@ -42,6 +44,7 @@ function toast(text) {
 function showHome() {
   $('home-name').textContent = self.name;
   $('btn-test').hidden = !DEBUG;
+  $('btn-resume').hidden = !HostRoom.savedGame();
   show('screen-home');
 }
 
@@ -183,7 +186,7 @@ async function hostAddGuest() {
     $('scanner').hidden = true;
     $('pair-status').textContent = 'Connexion…';
     await acceptAnswer(offer.pc, answer);
-    room.attach(offer.channel);
+    room.attach(offer.channel, offer.pc);
     await whenOpen(offer.channel, CONNECT_TIMEOUT_MS);
     toast('Participant connecté');
     show('screen-room');
@@ -192,13 +195,17 @@ async function hostAddGuest() {
   }
 }
 
+let guestPc = null; // the guest's own RTCPeerConnection, closed before re-pairing or leaving
+
 async function joinRoom() {
   showPair('Rejoindre un salon');
   try {
+    if (guestPc) { guestPc.close(); guestPc = null; } // drop any stale connection before rejoining
     const offer = await scan('Scanne le code affiché sur le téléphone de l\'hôte.');
     $('scanner').hidden = true;
     $('pair-status').textContent = 'Préparation…';
     const answer = await createAnswer(offer);
+    guestPc = answer.pc;
     window.fwfDebug.pc = answer.pc;
     $('pair-status').textContent = '';
     showCode('Fais scanner ce code par l\'hôte.', answer.code);
@@ -219,6 +226,10 @@ $('btn-host').onclick = () => {
   enterRoom(new HostRoom(self), true);
   hostAddGuest();
 };
+$('btn-resume').onclick = () => {
+  enterRoom(new HostRoom(self, HostRoom.savedGame()), true);
+  toast('Partie restaurée : invite les joueurs puis reprends');
+};
 $('btn-join').onclick = joinRoom;
 $('btn-test').onclick = () => {
   enterRoom(new HostRoom(self), true);
@@ -236,12 +247,14 @@ function enterRoom(newRoom, host) {
   $('btn-add-guest').hidden = !host;
   $('messages').innerHTML = '';
   selectTab('chat');
+  quiz.setup({ room, isHost: host });
   room.onMessage(handleMessage);
   show('screen-room');
 }
 
 function leaveRoom() {
   if (room) room.close();
+  if (guestPc) { guestPc.close(); guestPc = null; }
   room = null;
   showHome();
 }
@@ -253,12 +266,13 @@ function handleMessage(msg) {
       $('messages').innerHTML = '';
       msg.history.forEach(appendMessage);
       setMembers(msg.members);
-      renderQuiz(msg.quiz);
+      quiz.renderGame(msg.game);
       break;
     case 'members': setMembers(msg.members); break;
     case 'chat':
     case 'system': appendMessage(msg); break;
-    case 'quiz': renderQuiz(msg.state); break;
+    case 'game': quiz.renderGame(msg.state); break;
+    case 'reaction': quiz.showReaction(msg); break;
     case 'closed':
       room = null;
       show('screen-lost');
@@ -268,7 +282,7 @@ function handleMessage(msg) {
 
 function setMembers(list) {
   members = list;
-  const names = list.map((m) => (m.id === self.id ? 'toi' : m.name));
+  const names = list.map((m) => (m.id === self.id ? 'toi' : m.name) + (m.online === false ? ' (hors ligne)' : ''));
   $('members').textContent = list.length + (list.length > 1 ? ' participants : ' : ' participant : ') + names.join(', ');
 }
 
@@ -308,87 +322,11 @@ function selectTab(name) {
 
 // ---------- quiz ----------
 
-let quizIndex = -1;
-let myChoice = null;
-
-$('btn-quiz-start').onclick = $('btn-quiz-again').onclick = () => room && room.send({ t: 'quiz-start' });
-
-function renderQuiz(state) {
-  const phase = state ? state.phase : 'idle';
-  $('quiz-idle').hidden = phase !== 'idle';
-  $('quiz-play').hidden = phase !== 'question' && phase !== 'reveal';
-  $('quiz-end').hidden = phase !== 'end';
-  if (phase === 'idle') return;
-  if (phase === 'end') { renderScores(state.scores); return; }
-
-  if (state.index !== quizIndex) {
-    quizIndex = state.index;
-    myChoice = null;
-    selectTab('quiz');
-  }
-  $('quiz-index').textContent = 'Question ' + (state.index + 1) + ' / ' + state.total;
-  $('quiz-answered').textContent = state.answered.length + ' / ' + members.length + ' ont répondu';
-  $('quiz-question').textContent = state.question.text;
-  animateTimer(state.remaining, state.duration);
-
-  const box = $('quiz-choices');
-  box.innerHTML = '';
-  state.question.choices.forEach((choice, i) => {
-    const btn = document.createElement('button');
-    btn.textContent = choice;
-    if (phase === 'question') {
-      btn.disabled = myChoice !== null;
-      if (i === myChoice) btn.classList.add('picked');
-      btn.onclick = () => {
-        myChoice = i;
-        room.send({ t: 'answer', index: state.index, choice: i });
-        renderQuiz(state);
-      };
-    } else {
-      btn.disabled = true;
-      if (i === state.correct) btn.classList.add('correct');
-      else if (i === myChoice) btn.classList.add('wrong');
-      const voters = members.filter((m) => state.answers[m.id] === i).map((m) => m.name);
-      if (voters.length) {
-        const span = document.createElement('span');
-        span.className = 'voters';
-        span.textContent = voters.join(', ');
-        btn.appendChild(span);
-      }
-    }
-    box.appendChild(btn);
-  });
-
-  if (phase === 'question') {
-    $('quiz-feedback').textContent = myChoice === null ? '' : 'Réponse enregistrée, on attend les autres…';
-  } else {
-    $('quiz-feedback').textContent = myChoice === state.correct ? 'Bonne réponse !' : (myChoice === null ? 'Pas de réponse.' : 'Raté !');
-  }
-}
-
-function animateTimer(remaining, duration) {
-  const bar = $('timer-bar');
-  bar.style.transition = 'none';
-  bar.style.width = (100 * remaining / duration) + '%';
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    bar.style.transition = 'width ' + remaining + 'ms linear';
-    bar.style.width = '0%';
-  }));
-}
-
-function renderScores(scores) {
-  const ol = $('quiz-scores');
-  ol.innerHTML = '';
-  scores.forEach((s) => {
-    const li = document.createElement('li');
-    li.textContent = (s.id === self.id ? 'Toi' : s.name) + ' — ' + s.score + (s.score > 1 ? ' points' : ' point');
-    ol.appendChild(li);
-  });
-}
+quiz.setup({ selfId: self.id, onQuestion: () => selectTab('quiz') });
 
 // ---------- startup ----------
 
-window.fwfDebug = { code: null, scanned: submitScan };
+window.fwfDebug = { code: null, scanned: submitScan, setTiming: (t) => Object.assign(TIMING, t) };
 
 if ('serviceWorker' in navigator && !DEBUG) navigator.serviceWorker.register('./sw.js');
 

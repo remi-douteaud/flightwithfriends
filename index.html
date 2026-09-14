@@ -34,6 +34,7 @@
 
   <section id="screen-home" class="screen" hidden>
     <p class="greeting">Salut <strong id="home-name"></strong> ! <button id="btn-change-name" class="link">changer de nom</button></p>
+    <button id="btn-resume" class="big resume" hidden>Reprendre la partie en cours</button>
     <button id="btn-host" class="big">Créer un salon</button>
     <p class="hint">Tu seras l'hôte : les autres te rejoignent en scannant ton code.</p>
     <button id="btn-join" class="big secondary">Rejoindre un salon</button>
@@ -65,7 +66,7 @@
     <p>1. L'hôte (de préférence un Android) active le partage de connexion Wi‑Fi de son téléphone. Aucune connexion internet n'est nécessaire : c'est juste un réseau local.</p>
     <p>2. Les autres se connectent à ce Wi‑Fi (ignorer l'avertissement « pas d'internet »).</p>
     <p>3. L'hôte crée un salon, puis ajoute les participants un par un : chaque invité scanne le code de l'hôte, puis l'hôte scanne le code de l'invité.</p>
-    <p>4. Tout le monde discute et joue au quiz. Si l'hôte ferme l'appli, le salon disparaît.</p>
+    <p>4. Tout le monde discute et joue au quiz. Si l'hôte ferme l'appli, la partie est sauvegardée sur son téléphone : « Reprendre la partie en cours » la relance, les joueurs rescannent son code et retrouvent leurs points.</p>
     <button id="btn-help-back" class="big secondary">Retour</button>
   </section>
 
@@ -104,21 +105,51 @@
     </div>
 
     <div id="tab-quiz" class="tab" hidden>
-      <div id="quiz-idle">
-        <p>10 questions de culture générale, tout le monde joue en même temps. 20 secondes par question.</p>
-        <button id="btn-quiz-start" class="big">Lancer le quiz</button>
+      <div id="q-lobby" hidden>
+        <h2>Nouvelle partie</h2>
+        <p class="hint">Chacun vote pour la durée et bannit un thème. N'importe qui peut lancer.</p>
+        <h3>Durée</h3>
+        <div id="lobby-lengths" class="chips"></div>
+        <h3>Bannir un thème</h3>
+        <div id="lobby-themes" class="chips small"></div>
+        <p id="lobby-status" class="hint"></p>
+        <button id="btn-game-start" class="big">Lancer la partie</button>
       </div>
-      <div id="quiz-play" hidden>
+
+      <div id="q-paused" hidden>
+        <h2>Partie en pause</h2>
+        <p id="paused-text"></p>
+        <button id="btn-game-resume" class="big" hidden>Reprendre</button>
+      </div>
+
+      <div id="q-play" hidden>
         <p class="progress"><span id="quiz-index"></span><span id="quiz-answered"></span></p>
+        <div class="badges"><span id="quiz-theme" class="badge theme"></span><span id="quiz-diff" class="badge"></span><span id="quiz-freeze" class="badge freeze" hidden>Verrouillage anticipé</span></div>
         <div class="timer"><div id="timer-bar"></div></div>
+        <div id="quiz-shape" hidden><svg viewBox="0 0 100 100"><path d=""/></svg></div>
         <h2 id="quiz-question"></h2>
         <div id="quiz-choices"></div>
         <p id="quiz-feedback" class="status"></p>
+        <div id="reactions-bar" class="reactions" hidden></div>
+        <div id="reactions-feed" class="reactions-feed"></div>
       </div>
-      <div id="quiz-end" hidden>
-        <h2>Résultats</h2>
-        <ol id="quiz-scores"></ol>
-        <button id="btn-quiz-again" class="big">Rejouer</button>
+
+      <div id="q-board" hidden>
+        <h2 id="board-title"></h2>
+        <div id="board-rows" class="board"></div>
+        <p id="board-hint" class="hint"></p>
+        <button id="btn-quiz-again" class="big" hidden>Rejouer</button>
+      </div>
+
+      <div id="q-bonus" hidden>
+        <h2 id="bonus-title"></h2>
+        <p id="bonus-text"></p>
+        <div id="bonus-themes" class="chips small" hidden></div>
+        <div id="bonus-dice" hidden>
+          <p class="dice"><span id="dice-roll"></span></p>
+          <div id="dice-split"></div>
+          <button id="btn-dice-ok" class="big">Voler ces points</button>
+        </div>
       </div>
     </div>
   </section>

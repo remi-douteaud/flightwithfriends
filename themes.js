@@ -1,0 +1,30 @@
+// Theme ids match the file names in questions/.
+export const THEMES = [
+  { id: 'lol', name: 'League of Legends' },
+  { id: 'jeux-video', name: 'Jeux vidéo' },
+  { id: 'warcraft', name: 'Warcraft' },
+  { id: 'animaux', name: 'Animaux' },
+  { id: 'legumes', name: 'Légumes' },
+  { id: 'fleurs', name: 'Fleurs' },
+  { id: 'celebrites', name: 'Célébrités' },
+  { id: 'f1', name: 'Formule 1' },
+  { id: 'histoire', name: 'Histoire' },
+  { id: 'rois-de-france', name: 'Rois de France' },
+  { id: 'geographie', name: 'Géographie' },
+  { id: 'drapeaux', name: 'Drapeaux' },
+  { id: 'formes', name: 'Formes de pays' },
+  { id: 'litterature', name: 'Littérature' },
+  { id: 'harry-potter', name: 'Harry Potter' },
+  { id: 'musique-70-90', name: 'Musique 70s–90s' },
+  { id: 'musique-90-2010', name: 'Musique 90s–2010' },
+  { id: 'musique-2010', name: 'Musique 2010+' },
+  { id: 'art', name: 'Art' },
+  { id: 'internet-fr', name: 'Internet français' },
+  { id: 'cuisine', name: 'Cuisine' },
+  { id: 'cinema', name: 'Cinéma' },
+  { id: 'seigneur-des-anneaux', name: 'Seigneur des Anneaux' },
+  { id: 'dinosaures', name: 'Dinosaures' },
+  { id: 'monde-1444', name: 'Le monde en 1444' },
+];
+
+export const THEME_NAME = Object.fromEntries(THEMES.map((t) => [t.id, t.name]));
