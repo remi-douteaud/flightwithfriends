@@ -90,8 +90,8 @@
 
   <section id="screen-room" class="screen room" hidden>
     <nav class="tabs">
-      <button data-tab="chat" class="active">Discussion</button>
-      <button data-tab="quiz">Quiz</button>
+      <button data-tab="chat" class="active">Discussion<span class="tab-badge" hidden></span></button>
+      <button data-tab="quiz">Quiz<span class="tab-badge" hidden></span></button>
       <button id="btn-add-guest" hidden>+ Inviter</button>
     </nav>
     <p id="members" class="members"></p>
@@ -107,13 +107,31 @@
     <div id="tab-quiz" class="tab" hidden>
       <div id="q-lobby" hidden>
         <h2>Nouvelle partie</h2>
-        <p class="hint">Chacun vote pour la durée et bannit un thème. N'importe qui peut lancer.</p>
+        <p class="hint">Chacun vote pour la durée, l'hôte choisit les thèmes actifs. N'importe qui peut lancer : une phase de bannissement secret suit.</p>
         <h3>Durée</h3>
         <div id="lobby-lengths" class="chips"></div>
-        <h3>Bannir un thème</h3>
+        <h3 id="lobby-themes-title">Thèmes actifs</h3>
         <div id="lobby-themes" class="chips small"></div>
-        <p id="lobby-status" class="hint"></p>
+        <p id="lobby-status" class="status"></p>
         <button id="btn-game-start" class="big">Lancer la partie</button>
+      </div>
+
+      <div id="q-ban" hidden>
+        <h2>Phase de bannissement</h2>
+        <p class="hint">Choisis en secret un thème à bannir pour cette partie.</p>
+        <div class="timer"><div id="ban-timer"></div></div>
+        <div id="ban-themes" class="chips small"></div>
+        <p id="ban-status" class="status"></p>
+      </div>
+
+      <div id="q-ban-results" hidden>
+        <h2>Thèmes bannis</h2>
+        <ul id="ban-results" class="ban-list"></ul>
+      </div>
+
+      <div id="q-goodluck" class="splash" hidden>
+        <p class="big-text">Bonne chance !</p>
+        <p id="goodluck-sub" class="hint"></p>
       </div>
 
       <div id="q-paused" hidden>
@@ -123,12 +141,15 @@
       </div>
 
       <div id="q-play" hidden>
-        <p class="progress"><span id="quiz-index"></span><span id="quiz-answered"></span></p>
-        <div class="badges"><span id="quiz-theme" class="badge theme"></span><span id="quiz-diff" class="badge"></span><span id="quiz-freeze" class="badge freeze" hidden>Verrouillage anticipé</span></div>
+        <p class="progress"><span id="quiz-index"></span><span id="quiz-count"></span></p>
         <div class="timer"><div id="timer-bar"></div></div>
+        <div class="badges centered"><span id="quiz-theme" class="badge theme"></span><span id="quiz-diff" class="badge"></span></div>
+        <p id="quiz-freeze" class="freeze-note" hidden>Verrouillage anticipé : réponds maintenant pour le bonus maximal</p>
         <div id="quiz-shape" hidden><svg viewBox="0 0 100 100"><path d=""/></svg></div>
+        <img id="quiz-flag" class="flag" alt="" hidden>
         <h2 id="quiz-question"></h2>
         <div id="quiz-choices"></div>
+        <p id="quiz-answered" class="answered"></p>
         <p id="quiz-feedback" class="status"></p>
         <div id="reactions-bar" class="reactions" hidden></div>
         <div id="reactions-feed" class="reactions-feed"></div>

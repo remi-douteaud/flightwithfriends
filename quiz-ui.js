@@ -1,8 +1,9 @@
 // Renders the quiz tab from game state snapshots sent by the host.
-import { THEMES } from './themes.js';
+import { THEMES, THEME_COLOR, THEME_NAME } from './themes.js';
 import { LENGTHS, DICE_UNIT } from './game.js';
 import { REACTIONS } from './reactions.js';
 import { SHAPES } from './shapes.js';
+import { FLAGS } from './flags.js';
 
 const $ = (id) => document.getElementById(id);
 const DIFF = { 1: ['Facile', 'easy'], 2: ['Moyen', 'medium'], 3: ['Difficile', 'hard'] };
@@ -21,15 +22,21 @@ export function renderGame(s) {
   state = s;
   const phase = s ? s.phase : 'lobby';
   $('q-lobby').hidden = phase !== 'lobby';
+  $('q-ban').hidden = phase !== 'banning';
+  $('q-ban-results').hidden = phase !== 'ban-results';
+  $('q-goodluck').hidden = phase !== 'goodluck';
   $('q-paused').hidden = phase !== 'paused';
   $('q-play').hidden = !['freeze', 'question', 'reveal'].includes(phase);
   $('q-board').hidden = phase !== 'scoreboard' && phase !== 'end';
   $('q-bonus').hidden = phase !== 'bonus';
   if (!s) return;
   if (phase === 'lobby') boardKey = null;
-  if (s.index !== currentIndex && phase !== 'lobby') { currentIndex = s.index; myChoice = null; ctx.onQuestion(); }
+  if (s.index !== currentIndex && phase !== 'lobby') { currentIndex = s.index; myChoice = null; $('reactions-feed').innerHTML = ''; if (phase === 'freeze' || phase === 'question') ctx.onQuestion(s.index); }
   switch (phase) {
     case 'lobby': renderLobby(s); break;
+    case 'banning': renderBanning(s); break;
+    case 'ban-results': renderBanResults(s); break;
+    case 'goodluck': $('goodluck-sub').textContent = 'La partie commence…'; break;
     case 'paused': renderPaused(s); break;
     case 'freeze': case 'question': case 'reveal': renderQuestion(s); break;
     case 'scoreboard': case 'end': renderBoard(s); break;
@@ -40,11 +47,12 @@ export function renderGame(s) {
 const send = (msg) => ctx.room && ctx.room.send(msg);
 const label = (p) => (p.id === ctx.selfId ? 'toi' : p.name);
 
-function chips(container, items, { selected, onPick, counts }) {
+function chips(container, items, { selected, onPick, counts, readonly }) {
   container.innerHTML = '';
-  items.forEach(({ id, text }) => {
+  items.forEach(({ id, text, off }) => {
     const b = document.createElement('button');
-    b.className = 'chip' + (id === selected ? ' selected' : '');
+    b.className = 'chip' + (id === selected ? ' selected' : '') + (off ? ' off' : '') + (readonly ? ' readonly' : '');
+    if (THEME_COLOR[id] && !off) { b.style.borderColor = THEME_COLOR[id]; if (id === selected) b.style.background = THEME_COLOR[id]; else b.style.color = THEME_COLOR[id]; }
     b.textContent = text;
     if (counts && counts[id]) {
       const n = document.createElement('span');
@@ -52,7 +60,7 @@ function chips(container, items, { selected, onPick, counts }) {
       n.textContent = counts[id];
       b.appendChild(n);
     }
-    b.onclick = () => onPick(id);
+    if (!readonly) b.onclick = () => onPick(id);
     container.appendChild(b);
   });
 }
@@ -60,17 +68,41 @@ function chips(container, items, { selected, onPick, counts }) {
 // ---------- lobby ----------
 
 function renderLobby(s) {
-  const votes = s.lobby.votes, bans = s.lobby.banVotes;
+  const votes = s.lobby.votes;
   const counts = {};
   Object.values(votes).forEach((v) => { counts[v] = (counts[v] || 0) + 1; });
   chips($('lobby-lengths'), LENGTHS.map((l) => ({ id: String(l), text: l === 'all' ? 'Toutes' : String(l) })),
     { selected: String(votes[ctx.selfId]), counts, onPick: (id) => send({ t: 'vote', length: id === 'all' ? 'all' : Number(id) }) });
-  const banCounts = {};
-  Object.values(bans).forEach((v) => { banCounts[v] = (banCounts[v] || 0) + 1; });
-  chips($('lobby-themes'), THEMES.map((t) => ({ id: t.id, text: t.name })),
-    { selected: bans[ctx.selfId], counts: banCounts, onPick: (id) => send({ t: 'ban', theme: id }) });
+  const active = THEMES.length - s.disabled.length;
+  $('lobby-themes-title').textContent = 'Thèmes actifs (' + active + ' / ' + THEMES.length + ')' + (ctx.isHost ? ' — touche pour activer/désactiver' : ' — choisis par l\'hôte');
+  chips($('lobby-themes'), THEMES.map((t) => ({ id: t.id, text: t.name, off: s.disabled.includes(t.id) })),
+    { readonly: !ctx.isHost, onPick: (id) => send({ t: 'theme-toggle', theme: id, on: s.disabled.includes(id) }) });
   const voted = s.players.filter((p) => votes[p.id]).length;
-  $('lobby-status').textContent = voted + ' / ' + s.players.length + ' ont voté. Sans vote : 50 questions.';
+  $('lobby-status').textContent = voted + ' / ' + s.players.length + ' ont voté pour la durée. Sans vote : 50 questions. Chacun bannira ensuite un thème.';
+}
+
+function renderBanning(s) {
+  const mine = s.banning.mine;
+  chips($('ban-themes'), THEMES.filter((t) => !s.disabled.includes(t.id)).map((t) => ({ id: t.id, text: t.name })),
+    { selected: mine, readonly: !!mine, onPick: (id) => send({ t: 'ban', theme: id }) });
+  const online = s.players.filter((p) => p.online).length;
+  $('ban-status').textContent = (mine ? 'Tu as banni : ' + THEME_NAME[mine] + '. ' : '') + s.banning.done.length + ' / ' + online + ' ont choisi.';
+  const bar = $('ban-timer');
+  bar.style.transition = 'none'; bar.style.width = (100 * s.remaining / s.duration) + '%';
+  requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.transition = 'width ' + s.remaining + 'ms linear'; bar.style.width = '0%'; }));
+}
+
+function renderBanResults(s) {
+  const ul = $('ban-results');
+  ul.innerHTML = '';
+  if (!s.banResults.length) { const li = document.createElement('li'); li.textContent = 'Aucun thème banni !'; ul.appendChild(li); return; }
+  s.banResults.forEach((r) => {
+    const li = document.createElement('li');
+    const name = document.createElement('span'); name.textContent = THEME_NAME[r.theme]; name.style.color = THEME_COLOR[r.theme]; name.style.fontWeight = '600';
+    const by = document.createElement('span'); by.className = 'by'; by.textContent = 'banni par ' + r.by.join(', ');
+    li.append(name, by);
+    ul.appendChild(li);
+  });
 }
 $('btn-game-start').onclick = () => send({ t: 'start' });
 
@@ -88,14 +120,27 @@ function renderQuestion(s) {
   const q = s.question;
   const inQuestion = s.phase === 'freeze' || s.phase === 'question';
   $('quiz-index').textContent = 'Question ' + s.index + ' / ' + s.total;
-  $('quiz-answered').textContent = s.answered.length + ' / ' + s.players.filter((p) => p.online).length + ' ont répondu';
+  const online = s.players.filter((p) => p.online);
+  $('quiz-count').textContent = s.answered.length + ' / ' + online.length + ' ont répondu';
+  const done = online.filter((p) => s.answered.includes(p.id)).map(label);
+  const waiting = online.filter((p) => !s.answered.includes(p.id)).map(label);
+  const ans = $('quiz-answered');
+  ans.innerHTML = '';
+  if (inQuestion) {
+    const b1 = document.createElement('b'); b1.textContent = 'Ont répondu : ';
+    ans.append(b1, done.length ? done.join(', ') : '—');
+    if (waiting.length) { ans.append(document.createElement('br')); const b2 = document.createElement('b'); b2.textContent = 'En attente : '; ans.append(b2, waiting.join(', ')); }
+  }
   $('quiz-theme').textContent = q.theme;
+  $('quiz-theme').style.background = THEME_COLOR[q.themeId] || '';
   const [dText, dClass] = DIFF[q.d];
   $('quiz-diff').textContent = dText;
   $('quiz-diff').className = 'badge diff ' + dClass;
   $('quiz-freeze').hidden = s.phase !== 'freeze';
   $('quiz-shape').hidden = !q.shape;
   if (q.shape) $('quiz-shape').querySelector('path').setAttribute('d', SHAPES[q.shape] || '');
+  $('quiz-flag').hidden = !q.flag;
+  if (q.flag) $('quiz-flag').src = FLAGS[q.flag] || '';
   $('quiz-question').textContent = q.text;
   animateTimer(s.remaining, s.duration, s.phase);
 
@@ -104,7 +149,15 @@ function renderQuestion(s) {
   q.choices.forEach((choice, i) => {
     if (inQuestion && s.hidden.includes(i)) return;
     const btn = document.createElement('button');
-    btn.textContent = choice;
+    if (q.cf && FLAGS[q.cf[i]]) {
+      const img = document.createElement('img');
+      img.className = 'choice-flag';
+      img.src = FLAGS[q.cf[i]];
+      img.alt = choice;
+      btn.appendChild(img);
+    } else {
+      btn.textContent = choice;
+    }
     if (inQuestion) {
       btn.disabled = myChoice !== null;
       if (i === myChoice) btn.classList.add('picked');
@@ -127,14 +180,14 @@ function renderQuestion(s) {
 
   if (inQuestion) {
     $('quiz-feedback').textContent = myChoice === null
-      ? (s.phase === 'freeze' ? 'Réponds maintenant pour le bonus de temps maximal !' : (s.hidden.length ? 'Bonus : 2 réponses seulement.' : ''))
+      ? (s.hidden.length ? 'Bonus : 2 réponses seulement.' : '')
       : 'Réponse enregistrée, on attend les autres…';
   } else {
     const mine = s.answers[ctx.selfId];
     $('quiz-feedback').textContent = !mine ? 'Pas de réponse.' : (mine.correct ? 'Bonne réponse ! +' + mine.gain + ' points' : 'Raté !');
   }
-  $('reactions-bar').hidden = inQuestion;
-  if (!inQuestion && !$('reactions-bar').childElementCount) {
+  $('reactions-bar').hidden = inQuestion && myChoice === null; // available as soon as you have answered
+  if (!$('reactions-bar').childElementCount) {
     REACTIONS.forEach((e) => {
       const b = document.createElement('button');
       b.textContent = e;
@@ -142,7 +195,6 @@ function renderQuestion(s) {
       $('reactions-bar').appendChild(b);
     });
   }
-  if (inQuestion) $('reactions-feed').innerHTML = '';
 }
 
 export function showReaction(msg) {
@@ -248,7 +300,8 @@ function renderBonus(s) {
   const pickTheme = mine && b.awaiting && ['theme', 'ban', 'unban'].includes(b.type);
   $('bonus-themes').hidden = !pickTheme;
   if (pickTheme) {
-    const list = b.type === 'unban' ? THEMES.filter((t) => s.bans.includes(t.id)) : (b.type === 'ban' ? THEMES.filter((t) => !s.bans.includes(t.id)) : THEMES);
+    const active = THEMES.filter((t) => !s.disabled.includes(t.id));
+    const list = b.type === 'unban' ? active.filter((t) => s.bans.includes(t.id)) : (b.type === 'ban' ? active.filter((t) => !s.bans.includes(t.id)) : active);
     chips($('bonus-themes'), list.map((t) => ({ id: t.id, text: t.name + (s.bans.includes(t.id) && b.type === 'theme' ? ' (banni)' : '') })),
       { onPick: (id) => send({ t: 'bonus-choice', choice: { theme: id } }) });
   }

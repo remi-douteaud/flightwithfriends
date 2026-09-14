@@ -2,7 +2,7 @@
 import { BANK, QUESTION_BY_ID } from './bank.js';
 import { THEMES, THEME_NAME } from './themes.js';
 
-export const TIMING = { freeze: 3000, question: 20000, reveal: 6000, scoreboard: 9000, bonusChoice: 25000, bonusInfo: 5000 };
+export const TIMING = { freeze: 5000, question: 20000, minQuestion: 6000, reveal: 8000, scoreboard: 9000, bonusChoice: 25000, bonusInfo: 5000, ban: 30000, banResults: 7000, goodLuck: 3000 };
 export const LENGTHS = [50, 100, 200, 500, 'all'];
 const BASE_POINTS = { 1: 100, 2: 200, 3: 300 };
 const BONUS_EVERY = 8;
@@ -43,6 +43,7 @@ export class GameEngine {
     this.phase = 'lobby';
     this.votes = {}; this.banVotes = {};
     this.bans = new Set();
+    this.disabled = this.disabled || new Set(); // themes switched off by the host, kept between games
     this.unused = []; this.total = 0; this.index = 0;
     this.current = null; this.answers = new Map();
     this.forced = null; this.bonus = null;
@@ -53,24 +54,56 @@ export class GameEngine {
   }
 
   vote(id, length) { if (this.phase === 'lobby' && LENGTHS.includes(length)) { this.votes[id] = length; this.emit(); } }
-  banVote(id, theme) { if (this.phase === 'lobby' && THEME_NAME[theme]) { this.banVotes[id] = theme; this.emit(); } }
 
+  // Host only: switch a theme on/off for the coming games.
+  toggleTheme(theme, on) {
+    if (this.phase !== 'lobby' || !THEME_NAME[theme]) return;
+    if (on) this.disabled.delete(theme); else if (this.disabled.size < THEMES.length - 1) this.disabled.add(theme);
+    this.emit();
+  }
+
+  activeThemes() { return THEMES.map((t) => t.id).filter((t) => !this.disabled.has(t)); }
+
+  // Lobby -> secret ban phase. Each player picks one theme; ends when everyone online has picked or after TIMING.ban.
   start() {
     if (this.phase !== 'lobby') return;
     const counts = {};
     Object.values(this.votes).forEach((v) => { counts[v] = (counts[v] || 0) + 1; });
     const best = Math.max(0, ...Object.values(counts));
     const winners = LENGTHS.filter((l) => counts[l] === best);
-    const length = best === 0 ? 50 : sample(winners);
+    this.length = best === 0 ? 50 : sample(winners);
+    this.banVotes = {};
+    this.phase = 'banning';
+    this.setTimer(TIMING.ban, () => this.endBanning());
+  }
+
+  banVote(id, theme) {
+    if (this.phase !== 'banning' || !THEME_NAME[theme] || this.disabled.has(theme) || this.banVotes[id]) return;
+    this.banVotes[id] = theme;
+    if (this.onlineIds().every((p) => this.banVotes[p])) this.endBanning(); else this.emit();
+  }
+
+  endBanning() {
     this.bans = new Set(Object.values(this.banVotes));
+    this.banResults = [...this.bans].map((theme) => ({ theme, by: Object.entries(this.banVotes).filter(([, t]) => t === theme).map(([id]) => this.players.get(id).name) }));
+    this.phase = 'ban-results';
+    this.setTimer(TIMING.banResults, () => {
+      this.phase = 'goodluck';
+      this.setTimer(TIMING.goodLuck, () => this.beginQuestions());
+    });
+  }
+
+  beginQuestions() {
     this.unused = shuffle(BANK.map((q) => q.id));
-    const available = this.unused.filter((id) => !this.bans.has(QUESTION_BY_ID.get(id).theme)).length;
-    this.total = length === 'all' ? available : Math.min(length, available);
+    const available = this.unused.filter((id) => this.isPlayable(QUESTION_BY_ID.get(id).theme)).length;
+    this.total = this.length === 'all' ? available : Math.min(this.length, available);
     this.index = 0;
     this.players.forEach((p) => { p.score = 0; p.halfLeft = 0; });
     this.prevScores = this.scoresById();
     this.next();
   }
+
+  isPlayable(theme) { return !this.bans.has(theme) && !this.disabled.has(theme); }
 
   // ----- flow -----
 
@@ -96,7 +129,7 @@ export class GameEngine {
       id = pick((q) => q.theme === this.forced.theme);
       if (!id || --this.forced.left === 0) this.forced = null;
     }
-    if (!id) id = pick((q) => !this.bans.has(q.theme));
+    if (!id) id = pick((q) => this.isPlayable(q.theme));
     return id ? QUESTION_BY_ID.get(id) : null;
   }
 
@@ -111,7 +144,7 @@ export class GameEngine {
     this.setTimer(TIMING.freeze, () => {
       this.phase = 'question';
       this.setTimer(TIMING.question, () => this.reveal());
-      if (this.everyoneAnswered()) this.reveal(); else this.emit();
+      if (this.everyoneAnswered()) this.revealSoon(); else this.emit();
     });
   }
 
@@ -124,8 +157,19 @@ export class GameEngine {
     const correct = choice === this.current.a;
     const gain = correct ? Math.round(BASE_POINTS[this.current.d] * factor / 10) * 10 : 0;
     this.answers.set(id, { choice, gain, correct });
-    if (this.phase === 'question' && this.everyoneAnswered()) this.reveal(); else this.emit();
+    if (this.phase === 'question' && this.everyoneAnswered()) this.revealSoon(); else this.emit();
   }
+
+  // Everyone has answered: still leave the question on screen for a minimum time so nobody is rushed.
+  revealSoon() {
+    const wait = Math.max(0, this.startedAt + TIMING.minQuestion - Date.now());
+    if (wait === 0) return this.reveal();
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.reveal(), wait);
+    this.emit();
+  }
+
+  hasAnswered(id) { return this.answers.has(id); }
 
   everyoneAnswered() { return this.onlineIds().every((id) => this.answers.has(id)); }
 
@@ -157,7 +201,8 @@ export class GameEngine {
     if (ids.length < 2) return this.askQuestion();
     const min = Math.min(...ids.map((id) => this.players.get(id).score));
     const holder = sample(ids.filter((id) => this.players.get(id).score === min));
-    const types = BONUS_TYPES.filter((t) => (t !== 'unban' || this.bans.size > 0) && (t !== 'ban' || this.bans.size < THEMES.length - 2));
+    const active = this.activeThemes();
+    const types = BONUS_TYPES.filter((t) => (t !== 'unban' || this.bans.size > 0) && (t !== 'ban' || this.bans.size < active.length - 2));
     const type = sample(types);
     this.bonus = { holder, type, awaiting: true, roll: type === 'dice' ? 1 + Math.floor(Math.random() * 6) : null, result: null };
     this.phase = 'bonus';
@@ -173,7 +218,7 @@ export class GameEngine {
   resolveBonus(choice) {
     const b = this.bonus;
     const holder = this.players.get(b.holder);
-    const themeIds = THEMES.map((t) => t.id);
+    const themeIds = this.activeThemes();
     switch (b.type) {
       case 'half':
         holder.halfLeft = 3;
@@ -229,6 +274,7 @@ export class GameEngine {
   pause() {
     clearTimeout(this.timer);
     if (this.phase === 'lobby' || this.phase === 'end') return;
+    if (['banning', 'ban-results', 'goodluck'].includes(this.phase)) return this.resetToLobby();
     if (this.phase === 'freeze' || this.phase === 'question') { this.index--; this.unused.unshift(this.current.id); }
     this.phase = 'paused';
     this.bonus = null;
@@ -243,7 +289,7 @@ export class GameEngine {
   serialize() {
     return {
       players: [...this.players].map(([id, p]) => ({ id, name: p.name, score: p.score, halfLeft: p.halfLeft })),
-      bans: [...this.bans], unused: this.unused, total: this.total, index: this.index,
+      bans: [...this.bans], disabled: [...this.disabled], unused: this.unused, total: this.total, index: this.index,
       forced: this.forced, lastScoreboard: this.lastScoreboard, lastBonus: this.lastBonus, prevScores: this.prevScores,
       phase: this.phase === 'lobby' ? 'lobby' : (this.phase === 'end' ? 'end' : 'paused'),
     };
@@ -252,7 +298,7 @@ export class GameEngine {
   restore(data) {
     clearTimeout(this.timer);
     this.players = new Map(data.players.map((p) => [p.id, { name: p.name, score: p.score, online: false, halfLeft: p.halfLeft || 0 }]));
-    this.bans = new Set(data.bans); this.unused = data.unused; this.total = data.total; this.index = data.index;
+    this.bans = new Set(data.bans); this.disabled = new Set(data.disabled || []); this.unused = data.unused; this.total = data.total; this.index = data.index;
     this.forced = data.forced; this.lastScoreboard = data.lastScoreboard; this.lastBonus = data.lastBonus; this.prevScores = data.prevScores || {};
     this.phase = data.phase;
     if (this.phase === 'end') this.scoreboard = { quarter: 4, from: this.prevScores, to: this.scoresById() };
@@ -290,10 +336,13 @@ export class GameEngine {
       index: this.index, total: this.total,
       remaining: this.endsAt ? Math.max(0, this.endsAt - Date.now()) : 0, duration: this.duration || 0,
       players: this.ranking(),
-      lobby: this.phase === 'lobby' ? { votes: this.votes, banVotes: this.banVotes } : null,
+      lobby: this.phase === 'lobby' ? { votes: this.votes } : null,
+      disabled: [...this.disabled],
+      banning: this.phase === 'banning' ? { done: Object.keys(this.banVotes), mine: this.banVotes[id] || null } : null,
+      banResults: this.phase === 'ban-results' ? this.banResults : null,
       bans: [...this.bans],
       forced: this.forced,
-      question: showQ ? { id: q.id, text: q.q, choices: q.c, d: q.d, theme: THEME_NAME[q.theme], shape: q.shape || null } : null,
+      question: showQ ? { id: q.id, text: q.q, choices: q.c, d: q.d, theme: THEME_NAME[q.theme], themeId: q.theme, shape: q.shape || null, flag: q.flag || null, cf: q.cf || null } : null,
       hidden: inQuestion ? this.hiddenChoices(id) : [],
       answered: [...this.answers.keys()],
       correct: this.phase === 'reveal' ? q.a : null,

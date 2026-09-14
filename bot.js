@@ -9,6 +9,12 @@ const CHAT_REPLIES = [
   'Ha ha, bien vu !', 'On atterrit quand ?', 'Quelqu\'un a des bonbons ?', 'Je vote pour un quiz.',
   'Moi je dors bientôt.', 'Le film est nul.', 'Trop bien cette appli.', 'Pas d\'accord !',
 ];
+const CHAT_IDLE = [
+  'Il reste combien de temps de vol ?', 'Le plateau repas était… spécial.', 'Regardez par le hublot !',
+  'J\'ai les jambes en compote.', 'Quelqu\'un connaît la réponse à la dernière ?', 'Vous avez pris quoi comme film ?',
+  'On fait une pause après celle-là ?', 'La question sur les rois de France, sérieux ?', 'Mon voisin ronfle.',
+];
+const CHAT_IDLE_EVERY_MS = [45000, 120000]; // a bot says something at random every 45 s to 2 min
 const CORRECT_RATE = 0.6;
 const rand = (min, max) => min + Math.random() * (max - min);
 const sample = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -34,11 +40,19 @@ export class Bot {
 
   stop() { this.timers.forEach(clearTimeout); }
 
+  chatter() {
+    this.later(rand(...CHAT_IDLE_EVERY_MS), () => {
+      this.send({ t: 'chat', text: sample(CHAT_IDLE) });
+      this.chatter();
+    });
+  }
+
   receive(msg) {
     switch (msg.t) {
       case 'welcome':
         this.id = msg.self;
         this.later(rand(1000, 3000), () => this.send({ t: 'chat', text: 'Salut, c\'est ' + this.name + ' !' }));
+        this.chatter();
         this.onGame(msg.game);
         break;
       case 'chat':
@@ -58,10 +72,10 @@ export class Bot {
     this.inLobby = s.phase === 'lobby';
     switch (s.phase) {
       case 'lobby':
-        this.once('vote', rand(500, 2500), () => {
-          this.send({ t: 'vote', length: sample([50, 50, 100]) });
-          this.send({ t: 'ban', theme: sample(THEMES).id });
-        });
+        this.once('vote', rand(500, 2500), () => this.send({ t: 'vote', length: sample([50, 50, 100]) }));
+        break;
+      case 'banning':
+        this.once('ban', rand(1500, 6000), () => this.send({ t: 'ban', theme: sample(THEMES.filter((t) => !s.disabled.includes(t.id))).id }));
         break;
       case 'freeze':
       case 'question': {
@@ -69,7 +83,7 @@ export class Bot {
         const visible = [0, 1, 2, 3].filter((i) => !s.hidden.includes(i));
         const wrong = visible.filter((i) => i !== q.a);
         const choice = Math.random() < CORRECT_RATE || wrong.length === 0 ? q.a : sample(wrong);
-        this.once('q' + s.index, rand(1000, TIMING.freeze + TIMING.question * 0.5), () => this.send({ t: 'answer', index: s.index, choice }));
+        this.once('q' + s.index, rand(TIMING.freeze + 1500, TIMING.freeze + TIMING.question * 0.75), () => this.send({ t: 'answer', index: s.index, choice }));
         break;
       }
       case 'reveal':

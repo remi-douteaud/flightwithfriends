@@ -27,7 +27,6 @@ const NAMES = { US: 'États-Unis', GB: 'Royaume-Uni', RU: 'Russie', KR: 'Corée 
   CD: 'RD Congo', CZ: 'République tchèque', IR: 'Iran', SY: 'Syrie', VN: 'Vietnam', TZ: 'Tanzanie', BO: 'Bolivie',
   VE: 'Venezuela', LA: 'Laos', MK: 'Macédoine du Nord', CI: 'Côte d\'Ivoire', AE: 'Émirats arabes unis', TW: 'Taïwan' };
 const name = (a2) => NAMES[a2] || iso.getName(a2, 'fr', { select: 'official' }) || iso.getName(a2, 'fr');
-const flag = (a2) => String.fromCodePoint(...[...a2].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 
 // --- shapes ---
 const features = topojson.feature(world, world.objects.countries).features;
@@ -83,7 +82,7 @@ const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return se
 const pick = (arr, n, exclude) => { const pool = arr.filter((x) => x !== exclude); const out = []; while (out.length < n) { const x = pool[Math.floor(rnd() * pool.length)]; if (!out.includes(x)) out.push(x); } return out; };
 const shuffleIn = (correct, wrongs) => { const c = [...wrongs]; const a = Math.floor(rnd() * 4); c.splice(a, 0, correct); return { c, a }; };
 const esc = (s) => s.replace(/\\/g, '\\\\').replace(/'/g, '\\\'');
-const line = (o) => `  { d: ${o.d}, q: '${esc(o.q)}', c: [${o.c.map((x) => `'${esc(x)}'`).join(', ')}], a: ${o.a}${o.shape ? `, shape: '${o.shape}'` : ''} },`;
+const line = (o) => `  { d: ${o.d}, q: '${esc(o.q)}', c: [${o.c.map((x) => `'${esc(x)}'`).join(', ')}], a: ${o.a}${o.shape ? `, shape: '${o.shape}'` : ''}${o.flag ? `, flag: '${o.flag}'` : ''}${o.cf ? `, cf: [${o.cf.map((x) => `'${x}'`).join(', ')}]` : ''} },`;
 
 const byContinent = (cont) => LIST.filter((x) => x[1] === cont).map((x) => x[0]);
 const flagQs = [];
@@ -92,10 +91,10 @@ for (const [a2, cont, , fd] of LIST) {
   const others = pick(d === 1 ? LIST.map((x) => x[0]) : byContinent(cont), 3, a2);
   if (rnd() < 0.7) {
     const { c, a } = shuffleIn(name(a2), others.map(name));
-    flagQs.push({ d, q: `Quel pays a ce drapeau ? ${flag(a2)}`, c, a });
+    flagQs.push({ d, q: 'Quel pays a ce drapeau ?', c, a, flag: a2 });
   } else {
-    const { c, a } = shuffleIn(flag(a2), others.map(flag));
-    flagQs.push({ d, q: `Quel est le drapeau de ce pays : ${name(a2)} ?`, c, a });
+    const { c, a } = shuffleIn(a2, others); // choices are country codes, rendered as flag images (cf)
+    flagQs.push({ d, q: `Quel est le drapeau de ce pays : ${name(a2)} ?`, c, a, cf: c });
   }
 }
 const shapeQs = [];

@@ -6,7 +6,7 @@ import { TIMING } from './game.js';
 
 const $ = (id) => document.getElementById(id);
 const CONNECT_TIMEOUT_MS = 20000;
-const APP_VERSION = 'v4';
+const APP_VERSION = 'v7';
 const DEBUG = new URLSearchParams(location.search).has('debug') || localStorage.getItem('fwf.debug') === '1';
 const BOT_NAMES = ['Alice', 'Bruno', 'Chloé'];
 
@@ -264,7 +264,9 @@ function handleMessage(msg) {
   switch (msg.t) {
     case 'welcome':
       $('messages').innerHTML = '';
+      $('messages').dataset.loading = '1';
       msg.history.forEach(appendMessage);
+      $('messages').dataset.loading = '0';
       setMembers(msg.members);
       quiz.renderGame(msg.game);
       break;
@@ -301,6 +303,10 @@ function appendMessage(msg) {
   const box = $('messages');
   box.appendChild(el);
   box.scrollTop = box.scrollHeight;
+  if (activeTab !== 'chat' && msg.t === 'chat' && msg.id !== self.id && !$('screen-room').hidden && box.dataset.loading !== '1') {
+    unreadChat++;
+    setBadge('chat', String(unreadChat));
+  }
 }
 
 $('chat-form').addEventListener('submit', (e) => {
@@ -314,7 +320,19 @@ $('chat-form').addEventListener('submit', (e) => {
 
 document.querySelectorAll('.tabs [data-tab]').forEach((b) => { b.onclick = () => selectTab(b.dataset.tab); });
 
+let activeTab = 'chat';
+let unreadChat = 0;
+
+function setBadge(tab, text) {
+  const el = document.querySelector('.tabs [data-tab="' + tab + '"] .tab-badge');
+  el.textContent = text || '';
+  el.hidden = !text;
+}
+
 function selectTab(name) {
+  activeTab = name;
+  if (name === 'chat') unreadChat = 0;
+  setBadge(name, '');
   document.querySelectorAll('.tabs [data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
   $('tab-chat').hidden = name !== 'chat';
   $('tab-quiz').hidden = name !== 'quiz';
@@ -322,7 +340,10 @@ function selectTab(name) {
 
 // ---------- quiz ----------
 
-quiz.setup({ selfId: self.id, onQuestion: () => selectTab('quiz') });
+quiz.setup({ selfId: self.id, onQuestion: (index) => {
+  if (activeTab === 'quiz') return;
+  if (index === 1) selectTab('quiz'); else setBadge('quiz', 'Q' + index);
+} });
 
 // ---------- startup ----------
 

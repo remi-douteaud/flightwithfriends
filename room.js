@@ -79,7 +79,8 @@ export class HostRoom {
         break;
       case 'react': {
         const now = Date.now();
-        if (id && this.game.phase === 'reveal' && now - (this.lastReaction.get(id) || 0) > REACTION_COOLDOWN_MS) {
+        const canReact = this.game.phase === 'reveal' || ((this.game.phase === 'question' || this.game.phase === 'freeze') && this.game.hasAnswered(id));
+        if (id && canReact && now - (this.lastReaction.get(id) || 0) > REACTION_COOLDOWN_MS) {
           this.lastReaction.set(id, now);
           this.broadcast({ t: 'reaction', id, name: link.member.name, emoji: String(msg.emoji).slice(0, 4) });
         }
@@ -88,6 +89,7 @@ export class HostRoom {
       case 'vote': if (id) this.game.vote(id, msg.length); break;
       case 'ban': if (id) this.game.banVote(id, msg.theme); break;
       case 'start': if (id) this.game.start(); break;
+      case 'theme-toggle': if (link === this.local) this.game.toggleTheme(msg.theme, !!msg.on); break;
       case 'answer': if (id) this.game.answer(id, msg.index, msg.choice); break;
       case 'bonus-choice': if (id) this.game.bonusChoice(id, msg.choice); break;
       case 'replay': if (id) this.game.resetToLobby(); break;

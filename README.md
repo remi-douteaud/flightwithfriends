@@ -19,17 +19,25 @@ Quiz
 Lobby (everyone votes, anyone launches):
 - Vote the length: 50 / 100 / 200 / 500 / toutes. Ties broken at random, no
   vote defaults to 50.
-- Each player bans one theme; every banned theme is removed for the game.
+- The host switches themes on/off (kept between games; disabled themes are
+  never asked, never bannable, never offered by a bonus).
+- Launch -> secret ban phase (30 s, ends early when everyone has picked): each
+  player picks one active theme to ban -> ban results screen (theme + who
+  banned it, 7 s) -> "Bonne chance !" (3 s) -> questions.
+- Each theme has its own colour (themes.js); the theme badge sits centred under
+  the timer above the question.
 
 Per question:
 - The theme and difficulty (Facile / Moyen / Difficile) are shown up front.
-- A 3 s "verrouillage anticipé" freeze lets you pre-lock an answer before the
+- A 5 s "verrouillage anticipé" freeze lets you pre-lock an answer before the
   timer starts; locking during the freeze earns the maximum time bonus.
 - Scoring: base 100 / 200 / 300 by difficulty, multiplied by a time factor —
   1.0 during the freeze, then decaying from 1.0 to 0.5 across the 20 s timer,
   rounded to 10. Wrong or no answer = 0.
-- Reveal shows the right answer, who picked what and their gain, then a row of
-  ~8 emoji reactions (💩 🤣 😭 🔥 🤯 😴 🤔 👏) that fly onto everyone's screen.
+- Once everyone has answered the question stays up for at least 6 s (minQuestion)
+  before the 8 s reveal, so nobody is rushed.
+- A row of ~8 emoji reactions (💩 🤣 😭 🔥 🤯 😴 🤔 👏) is available as soon as you
+  have answered and during the reveal; reactions fly onto everyone's screen.
 
 Animated scoreboard at each quarter (25/50/75/100 %): bars grow and rows slide
 into their new ranking, points count up.
@@ -45,15 +53,15 @@ Themes (25) and questions
 questions/<theme>.js, ~40 questions each (drapeaux and formes have more),
 difficulty 1–3. Themes: League of Legends, jeux vidéo, Warcraft, animaux,
 légumes, fleurs, célébrités, Formule 1, histoire, rois de France, géographie,
-drapeaux (flag emojis), formes de pays (SVG outlines in shapes.js), littérature,
+drapeaux (PNG flags in flags.js — emoji flags don't render on Windows), formes de pays (SVG outlines in shapes.js), littérature,
 Harry Potter, musique 70s–90s / 90s–2010 / 2010+, art, culture internet
 française, cuisine, cinéma, Seigneur des Anneaux, dinosaures, le monde en 1444.
 bank.js flattens them all with a stable id (theme:index) so a game survives
 save/restore. themes.js is the registry (edit to add/rename a theme).
 
-To regenerate flags, shapes and the country outlines after editing the country
-list: `node tools/build-geo.mjs` (dev-only; needs `npm i world-atlas
-topojson-client i18n-iso-countries`).
+To regenerate after editing the country list: `node tools/build-geo.mjs` then
+`node tools/build-flags.mjs` (dev-only; needs `npm i world-atlas topojson-client
+i18n-iso-countries flag-icons playwright`).
 
 Save / resume / reconnect
 -------------------------
@@ -63,6 +71,10 @@ restores it (paused); players rescan the host's code and get their scores back.
 A player who drops is kept in the standings as "(hors ligne)"; rejoining with
 the same device restores their place and chat history. Disconnected players
 don't block the question timer.
+
+Chat and quiz tabs can be switched at any time during a game; the other tab
+shows a badge (unread message count, or "Q12" when a new question started).
+The app only switches to the quiz by itself on the first question.
 
 Files
 -----
@@ -78,6 +90,7 @@ quiz-ui.js     renders the quiz tab from those snapshots
 bot.js         simulated players for the test room (debug mode)
 themes.js, bank.js, questions/*.js, shapes.js, reactions.js
 tools/build-geo.mjs   regenerates drapeaux.js, formes.js and shapes.js
+tools/build-flags.mjs rasterises flag-icons SVGs into flags.js (PNG data URIs)
 sw.js          offline cache — bump VERSION after changing any file
 manifest.json, icons/, test/e2e.mjs
 
@@ -94,8 +107,8 @@ computes scores; guests only learn the answer at reveal).
 Settings / debug mode
 ---------------------
 Gear icon top right -> "Mode débug" (localStorage, or ?debug in the URL). Adds
-a "Salon de test (3 bots)" button (bots vote, ban, answer ~60% right, react and
-use their bonuses), shows the pairing code as text with copy/paste so two tabs
+a "Salon de test (3 bots)" button (bots vote, ban, answer ~60% right, react, use
+their bonuses and say something in the chat every 45 s–2 min), shows the pairing code as text with copy/paste so two tabs
 pair without a camera, and skips the service worker so reloads are fresh.
 window.fwfDebug exposes .code, .scanned(text), .setTiming({...}) and, on the
 host, .hostAnswer (used by the tests).
