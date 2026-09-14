@@ -16,7 +16,10 @@
 <body>
 <header class="topbar">
   <span class="brand">Vol entre amis</span>
-  <button id="btn-leave" class="link light" hidden>Quitter</button>
+  <span class="topbar-actions">
+    <button id="btn-leave" class="link light" hidden>Quitter</button>
+    <button id="btn-settings" class="icon" aria-label="Réglages" title="Réglages">&#9881;</button>
+  </span>
 </header>
 
 <main>
@@ -43,6 +46,15 @@
       <button id="share-copy" class="chip">Copier le message</button>
     </div>
     <button id="btn-help" class="link">Comment ça marche ?</button>
+    <button id="btn-test" class="big test" hidden>Salon de test (3 bots)</button>
+  </section>
+
+  <section id="screen-settings" class="screen" hidden>
+    <h2>Réglages</h2>
+    <label class="toggle"><input type="checkbox" id="debug-toggle"> Mode débug</label>
+    <p class="hint">Ajoute un salon de test avec 3 participants simulés, affiche les codes d'appairage en texte (copier/coller entre deux navigateurs sans caméra) et désactive le cache hors-ligne.</p>
+    <p class="hint">Version de l'appli : <span id="app-version"></span></p>
+    <button id="btn-settings-back" class="big secondary">Retour</button>
   </section>
 
   <section id="screen-help" class="screen" hidden>
@@ -62,6 +74,14 @@
     <p id="pair-hint"></p>
     <canvas id="qr-canvas" width="720" height="720" hidden></canvas>
     <div id="scanner" hidden><video id="scan-video" playsinline muted></video></div>
+    <div id="pair-debug" class="debug" hidden>
+      <textarea id="pair-code" readonly rows="3" hidden></textarea>
+      <button id="pair-copy" class="chip" hidden>Copier le code</button>
+      <form id="pair-paste-form" hidden>
+        <input id="pair-paste" placeholder="Coller un code ici" autocomplete="off">
+        <button class="chip">Utiliser ce code</button>
+      </form>
+    </div>
     <p id="pair-status" class="status"></p>
     <button id="pair-next" class="big" hidden></button>
     <button id="pair-cancel" class="big secondary">Annuler</button>

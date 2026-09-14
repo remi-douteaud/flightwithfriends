@@ -4,7 +4,9 @@ import { HostRoom, GuestRoom } from './room.js';
 
 const $ = (id) => document.getElementById(id);
 const CONNECT_TIMEOUT_MS = 20000;
-const DEBUG = new URLSearchParams(location.search).has('debug');
+const APP_VERSION = 'v3';
+const DEBUG = new URLSearchParams(location.search).has('debug') || localStorage.getItem('fwf.debug') === '1';
+const BOT_NAMES = ['Alice', 'Bruno', 'Chloé'];
 
 const self = {
   id: localStorage.getItem('fwf.id') || saveId(),
@@ -39,8 +41,24 @@ function toast(text) {
 
 function showHome() {
   $('home-name').textContent = self.name;
+  $('btn-test').hidden = !DEBUG;
   show('screen-home');
 }
+
+// ---------- settings ----------
+
+$('btn-settings').onclick = () => {
+  $('debug-toggle').checked = DEBUG;
+  $('app-version').textContent = APP_VERSION;
+  settingsReturn = room ? 'screen-room' : 'screen-home';
+  show('screen-settings');
+};
+let settingsReturn = 'screen-home';
+$('btn-settings-back').onclick = () => (settingsReturn === 'screen-home' ? showHome() : show(settingsReturn));
+$('debug-toggle').onchange = (e) => {
+  localStorage.setItem('fwf.debug', e.target.checked ? '1' : '0');
+  toast('Recharge l\'appli pour appliquer');
+};
 
 // ---------- name ----------
 
@@ -87,7 +105,30 @@ function showPair(title) {
   $('qr-canvas').hidden = true;
   $('scanner').hidden = true;
   $('pair-next').hidden = true;
+  $('pair-debug').hidden = !DEBUG;
+  setDebugPair(null);
   show('screen-pair');
+}
+
+// Debug helpers on the pairing screen: show the code as text, accept a pasted one.
+function setDebugPair(mode) {
+  $('pair-code').hidden = $('pair-copy').hidden = mode !== 'code';
+  $('pair-paste-form').hidden = mode !== 'scan';
+}
+$('pair-copy').onclick = () => navigator.clipboard.writeText($('pair-code').value).then(() => toast('Code copié'));
+$('pair-paste-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = $('pair-paste').value.trim();
+  $('pair-paste').value = '';
+  if (text) submitScan(text);
+});
+
+function submitScan(text) {
+  if (!pendingScan) return;
+  const resolve = pendingScan;
+  pendingScan = null;
+  scanner.stop();
+  resolve(text);
 }
 
 function showCode(hint, code) {
@@ -95,16 +136,22 @@ function showCode(hint, code) {
   $('scanner').hidden = true;
   renderQr($('qr-canvas'), code);
   $('qr-canvas').hidden = false;
-  if (DEBUG) window.fwfDebug.code = code;
+  $('pair-code').value = code;
+  setDebugPair('code');
+  window.fwfDebug.code = code;
 }
 
 function scan(hint) {
   $('pair-hint').textContent = hint;
   $('qr-canvas').hidden = true;
   $('scanner').hidden = false;
+  setDebugPair('scan');
   return new Promise((resolve, reject) => {
     pendingScan = resolve;
-    scanner.start((text) => { pendingScan = null; resolve(text); }).catch((err) => reject(new Error('Caméra inaccessible : ' + err.message)));
+    scanner.start((text) => { pendingScan = null; resolve(text); }).catch((err) => {
+      if (DEBUG) { $('scanner').hidden = true; toast('Pas de caméra : colle un code'); return; }
+      reject(new Error('Caméra inaccessible : ' + err.message));
+    });
   });
 }
 
@@ -124,7 +171,7 @@ async function hostAddGuest() {
   try {
     $('pair-status').textContent = 'Préparation…';
     const offer = await createOffer();
-    if (DEBUG) window.fwfDebug.pc = offer.pc;
+    window.fwfDebug.pc = offer.pc;
     $('pair-status').textContent = '';
     showCode('Étape 1 : fais scanner ce code par ton ami (il choisit « Rejoindre un salon »).', offer.code);
     const next = $('pair-next');
@@ -152,7 +199,7 @@ async function joinRoom() {
     $('scanner').hidden = true;
     $('pair-status').textContent = 'Préparation…';
     const answer = await createAnswer(offer);
-    if (DEBUG) { window.fwfDebug.pc = answer.pc; window.fwfDebug.channelPromise = answer.channelPromise; }
+    window.fwfDebug.pc = answer.pc;
     $('pair-status').textContent = '';
     showCode('Fais scanner ce code par l\'hôte.', answer.code);
     const channel = await whenOpen(await answer.channelPromise, 60000);
@@ -173,6 +220,10 @@ $('btn-host').onclick = () => {
   hostAddGuest();
 };
 $('btn-join').onclick = joinRoom;
+$('btn-test').onclick = () => {
+  enterRoom(new HostRoom(self), true);
+  BOT_NAMES.forEach((name, i) => setTimeout(() => room && room.addBot(name), 800 * (i + 1)));
+};
 $('btn-add-guest').onclick = hostAddGuest;
 $('btn-rejoin').onclick = joinRoom;
 $('btn-lost-home').onclick = showHome;
@@ -337,9 +388,7 @@ function renderScores(scores) {
 
 // ---------- startup ----------
 
-if (DEBUG) {
-  window.fwfDebug = { code: null, scanned: (text) => { if (pendingScan) { scanner.stop(); pendingScan(text); pendingScan = null; } } };
-}
+window.fwfDebug = { code: null, scanned: submitScan };
 
 if ('serviceWorker' in navigator && !DEBUG) navigator.serviceWorker.register('./sw.js');
 

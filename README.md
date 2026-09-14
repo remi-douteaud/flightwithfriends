@@ -35,6 +35,7 @@ sdp.js        packs a session description into ~260 bytes for the QR code
 qr.js         QR rendering (qrcode-generator) and camera scanning (jsQR)
 room.js       HostRoom (relay + quiz owner) and GuestRoom, same interface
 quiz.js       quiz engine (host only), emits state snapshots
+bot.js        simulated participants for the test room (debug mode)
 questions.js  the question bank, edit freely
 sw.js         offline cache; bump VERSION after changing any file
 manifest.json, icons/
@@ -48,10 +49,13 @@ host  -> all  : welcome {self,members,history,quiz} | members | chat | system
 
 Debug mode
 ----------
-Append ?debug to the URL: the service worker is not registered and
-window.fwfDebug exposes the current QR payload (.code) and a way to inject
-a scanned payload (.scanned(text)) so two browser tabs can be paired
-without a camera. The Playwright end-to-end test used during development
+Gear icon top right -> "Mode debug" (stored in localStorage, or append
+?debug to the URL). It adds a "Salon de test (3 bots)" button on the home
+screen (bots chat a little and answer the quiz, ~60% correct), shows the
+pairing code as text with copy/paste fields so two browser tabs can be
+paired without a camera, and skips the service worker so reloads pick up
+fresh files. window.fwfDebug exposes the current code (.code) and
+.scanned(text) for scripted tests. bot.js holds the bot logic. The Playwright end-to-end test used during development
 is in test/e2e.mjs (needs `npm i playwright` and a local http server on
 port 8099).
 

@@ -1,8 +1,8 @@
 // Offline cache: everything is fetched once, then served from cache. Bump VERSION when files change.
-const VERSION = 'fwf-v2';
+const VERSION = 'fwf-v3';
 const FILES = [
   './', './index.html', './style.css', './app.js', './peer.js', './sdp.js', './qr.js', './room.js',
-  './quiz.js', './questions.js', './vendor/jsQR.js', './vendor/qrcode.js', './manifest.json',
+  './quiz.js', './bot.js', './questions.js', './vendor/jsQR.js', './vendor/qrcode.js', './manifest.json',
   './icons/icon-192.png', './icons/icon-512.png',
 ];
 

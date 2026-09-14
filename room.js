@@ -2,6 +2,7 @@
 // tiny interface to the UI: send(msg), onMessage(handler), close().
 import { QuizEngine } from './quiz.js';
 import { QUESTIONS } from './questions.js';
+import { Bot } from './bot.js';
 
 const HISTORY_LIMIT = 200;
 
@@ -30,9 +31,16 @@ export class HostRoom {
     channel.onclose = () => this.detach(link);
   }
 
+  addBot(name) {
+    const link = { channel: null, member: null, bot: null };
+    link.bot = new Bot(name, (msg) => this.handle(link, msg));
+    this.links.push(link);
+    this.handle(link, { t: 'hello', id: 'bot-' + Math.random().toString(36).slice(2, 8), name });
+  }
+
   close() {
     this.quiz.stop();
-    this.links.forEach((l) => l.channel && l.channel.close());
+    this.links.forEach((l) => { if (l.channel) l.channel.close(); if (l.bot) l.bot.stop(); });
   }
 
   members() {
@@ -84,6 +92,7 @@ export class HostRoom {
 
   deliver(link, msg) {
     if (link === this.local) this.handler(msg);
+    else if (link.bot) link.bot.receive(msg);
     else if (link.channel.readyState === 'open') link.channel.send(JSON.stringify(msg));
   }
 }
