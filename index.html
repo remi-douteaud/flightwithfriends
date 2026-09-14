@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vol entre amis</title>
+<meta name="theme-color" content="#1d3557">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Vol entre amis">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <span class="brand">Vol entre amis</span>
+  <button id="btn-leave" class="link light" hidden>Quitter</button>
+</header>
+
+<main>
+  <section id="screen-name" class="screen">
+    <h1>Bienvenue à bord</h1>
+    <p>Comment t'appelles-tu ?</p>
+    <form id="name-form">
+      <input id="name-input" maxlength="20" autocomplete="nickname" required placeholder="Ton prénom">
+      <button class="big">Continuer</button>
+    </form>
+  </section>
+
+  <section id="screen-home" class="screen" hidden>
+    <p class="greeting">Salut <strong id="home-name"></strong> ! <button id="btn-change-name" class="link">changer de nom</button></p>
+    <button id="btn-host" class="big">Créer un salon</button>
+    <p class="hint">Tu seras l'hôte : les autres te rejoignent en scannant ton code.</p>
+    <button id="btn-join" class="big secondary">Rejoindre un salon</button>
+    <p class="hint">Scanne le code affiché sur le téléphone de l'hôte.</p>
+    <button id="btn-share" class="big secondary">Inviter des amis</button>
+    <p class="hint">Envoie le lien de l'appli par WhatsApp ou SMS, à faire avant le vol.</p>
+    <div id="share-fallback" class="share-row" hidden>
+      <a id="share-whatsapp" class="chip" target="_blank" rel="noopener">WhatsApp</a>
+      <a id="share-sms" class="chip">SMS</a>
+      <button id="share-copy" class="chip">Copier le message</button>
+    </div>
+    <button id="btn-help" class="link">Comment ça marche ?</button>
+  </section>
+
+  <section id="screen-help" class="screen" hidden>
+    <h2>Comment ça marche</h2>
+    <h3>Avant le vol</h3>
+    <p>Chacun ouvre ce lien une fois avec internet : l'appli se met en mémoire et fonctionne ensuite sans réseau. Sur iPhone, « Sur l'écran d'accueil » depuis le menu Partager de Safari ; sur Android, « Installer l'application » dans le menu de Chrome.</p>
+    <h3>Dans l'avion</h3>
+    <p>1. L'hôte (de préférence un Android) active le partage de connexion Wi‑Fi de son téléphone. Aucune connexion internet n'est nécessaire : c'est juste un réseau local.</p>
+    <p>2. Les autres se connectent à ce Wi‑Fi (ignorer l'avertissement « pas d'internet »).</p>
+    <p>3. L'hôte crée un salon, puis ajoute les participants un par un : chaque invité scanne le code de l'hôte, puis l'hôte scanne le code de l'invité.</p>
+    <p>4. Tout le monde discute et joue au quiz. Si l'hôte ferme l'appli, le salon disparaît.</p>
+    <button id="btn-help-back" class="big secondary">Retour</button>
+  </section>
+
+  <section id="screen-pair" class="screen" hidden>
+    <h2 id="pair-title"></h2>
+    <p id="pair-hint"></p>
+    <canvas id="qr-canvas" width="720" height="720" hidden></canvas>
+    <div id="scanner" hidden><video id="scan-video" playsinline muted></video></div>
+    <p id="pair-status" class="status"></p>
+    <button id="pair-next" class="big" hidden></button>
+    <button id="pair-cancel" class="big secondary">Annuler</button>
+  </section>
+
+  <section id="screen-room" class="screen room" hidden>
+    <nav class="tabs">
+      <button data-tab="chat" class="active">Discussion</button>
+      <button data-tab="quiz">Quiz</button>
+      <button id="btn-add-guest" hidden>+ Inviter</button>
+    </nav>
+    <p id="members" class="members"></p>
+
+    <div id="tab-chat" class="tab">
+      <div id="messages"></div>
+      <form id="chat-form">
+        <input id="chat-input" placeholder="Message…" autocomplete="off" maxlength="500">
+        <button>Envoyer</button>
+      </form>
+    </div>
+
+    <div id="tab-quiz" class="tab" hidden>
+      <div id="quiz-idle">
+        <p>10 questions de culture générale, tout le monde joue en même temps. 20 secondes par question.</p>
+        <button id="btn-quiz-start" class="big">Lancer le quiz</button>
+      </div>
+      <div id="quiz-play" hidden>
+        <p class="progress"><span id="quiz-index"></span><span id="quiz-answered"></span></p>
+        <div class="timer"><div id="timer-bar"></div></div>
+        <h2 id="quiz-question"></h2>
+        <div id="quiz-choices"></div>
+        <p id="quiz-feedback" class="status"></p>
+      </div>
+      <div id="quiz-end" hidden>
+        <h2>Résultats</h2>
+        <ol id="quiz-scores"></ol>
+        <button id="btn-quiz-again" class="big">Rejouer</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-lost" class="screen" hidden>
+    <h2>Connexion perdue</h2>
+    <p>Le lien avec l'hôte a été coupé. Vérifie que tu es toujours sur son Wi‑Fi, puis scanne à nouveau son code.</p>
+    <button id="btn-rejoin" class="big">Rejoindre à nouveau</button>
+    <button id="btn-lost-home" class="big secondary">Accueil</button>
+  </section>
+</main>
+
+<div id="toast" hidden></div>
+
+<script src="vendor/qrcode.js"></script>
+<script src="vendor/jsQR.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
